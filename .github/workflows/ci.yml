@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Auto Build CI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macOS-latest ]
+        rust: [ stable, beta, nightly ]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@master
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+          override: true
+
+      - name: Setup PostgreSQL (for ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev postgresql
+          echo "host    all             all             127.0.0.1/32            md5" > sudo tee -a /etc/postgresql/10/main/pg_hba.conf
+          sudo service postgresql restart && sleep 3
+          sudo -u postgres createuser casbin_rs
+          sudo -u postgres createdb casbin
+          sudo -u postgres psql -c "alter user casbin_rs with encrypted password 'casbin_rs'; grant all privileges on database casbin to casbin_rs;"
+          sudo service postgresql restart && sleep 3
+
+      - name: Setup PostgreSQL (for macOS)
+        if: matrix.os == 'macOS-latest'
+        run: |
+          brew update
+          pg_ctl -D /usr/local/var/postgres start
+          sleep 3
+          createuser casbin_rs
+          createdb casbin
+          psql postgres -c "alter user casbin_rs with encrypted password 'casbin_rs'; grant all privileges on database casbin to casbin_rs;"
+
+      - name: Setup PostgreSQL (for windows)
+        if: matrix.os == 'windows-latest'
+        shell: cmd
+        run: |
+          choco install postgresql11 --force --params '/Password:root'
+          "C:\Program Files\PostgreSQL\11\bin\createuser" casbin_rs
+          "C:\Program Files\PostgreSQL\11\bin\createdb" casbin
+          "C:\Program Files\PostgreSQL\11\bin\psql" -c "alter user casbin_rs with encrypted password 'casbin_rs'; grant all privileges on database casbin to casbin_rs;"
+
+      - name: Set environment variables (for windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          echo "C:\Program Files\PostgreSQL\11\bin" >> $GITHUB_PATH
+          echo "PQ_LIB_DIR=C:\Program Files\PostgreSQL\11\lib" >> $GITHUB_ENV
+
+      - name: Create PostgresSQL Table
+        run: psql -c "CREATE TABLE IF NOT EXISTS casbin_rule (
+          id SERIAL PRIMARY KEY,
+          ptype VARCHAR NOT NULL,
+          v0 VARCHAR NOT NULL,
+          v1 VARCHAR NOT NULL,
+          v2 VARCHAR NOT NULL,
+          v3 VARCHAR NOT NULL,
+          v4 VARCHAR NOT NULL,
+          v5 VARCHAR NOT NULL,
+          CONSTRAINT unique_key_sqlx_adapter UNIQUE(ptype, v0, v1, v2, v3, v4, v5)
+          );" postgres://casbin_rs:casbin_rs@127.0.0.1:5432/casbin
+
+      - name: Cargo Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      # PostgreSQL tests
+      # tokio
+      - name: Cargo Test For PostgreSQL,runtime-tokio
+        uses: actions-rs/cargo@v1
+        env:
+          DATABASE_URL: postgres://casbin_rs:casbin_rs@localhost:5432/casbin
+        with:
+          command: test
+          args: --no-default-features --features runtime-tokio
+
+      - name: Cargo Clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
+
+      - name: Cargo Fmt Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
