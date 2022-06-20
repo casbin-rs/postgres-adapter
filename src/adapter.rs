@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use casbin::{
-    error::AdapterError, Adapter, Error as CasbinError, Filter, Model, Result,
-};
+use casbin::{error::AdapterError, Adapter, Error as CasbinError, Filter, Model, Result};
 use dotenv::dotenv;
 use std::{
     str::FromStr,
@@ -38,25 +36,16 @@ impl<'a> TokioPostgresAdapter {
         <T::TlsConnect as TlsConnect<Socket>>::Future: Send,
     {
         dotenv().ok();
-        let pg_config = PgConfig::from_str(&url.into()).map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
+        let pg_config = PgConfig::from_str(&url.into())
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
         let mgr_config = deadpool_postgres::ManagerConfig {
             recycling_method: deadpool_postgres::RecyclingMethod::Fast,
         };
-        let mgr = deadpool_postgres::Manager::from_config(
-            pg_config, tls, mgr_config,
-        );
+        let mgr = deadpool_postgres::Manager::from_config(pg_config, tls, mgr_config);
         let pool = deadpool_postgres::Pool::builder(mgr)
             .max_size(pool_size as usize)
             .build()
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(Error::BuildError(
-                    err,
-                ))))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::BuildError(err)))))?;
         adapter::new(&pool).await.map(|_| Self {
             pool,
             is_filtered: Arc::new(AtomicBool::new(false)),
@@ -114,20 +103,14 @@ impl<'a> TokioPostgresAdapter {
         Some(new_rule)
     }
 
-    pub(crate) fn load_policy_line(
-        &self,
-        casbin_rule: &CasbinRule,
-    ) -> Option<Vec<String>> {
+    pub(crate) fn load_policy_line(&self, casbin_rule: &CasbinRule) -> Option<Vec<String>> {
         if casbin_rule.ptype.chars().next().is_some() {
             return self.normalize_policy(casbin_rule);
         }
         None
     }
 
-    fn normalize_policy(
-        &self,
-        casbin_rule: &CasbinRule,
-    ) -> Option<Vec<String>> {
+    fn normalize_policy(&self, casbin_rule: &CasbinRule) -> Option<Vec<String>> {
         let mut result = vec![
             &casbin_rule.v0,
             &casbin_rule.v1,
@@ -161,9 +144,7 @@ impl Adapter for TokioPostgresAdapter {
         for casbin_rule in &rules {
             let rule = self.load_policy_line(casbin_rule);
 
-            if let Some(ref sec) =
-                casbin_rule.ptype.chars().next().map(|x| x.to_string())
-            {
+            if let Some(ref sec) = casbin_rule.ptype.chars().next().map(|x| x.to_string()) {
                 if let Some(t1) = m.get_mut_model().get_mut(sec) {
                     if let Some(t2) = t1.get_mut(&casbin_rule.ptype) {
                         if let Some(rule) = rule {
@@ -177,19 +158,13 @@ impl Adapter for TokioPostgresAdapter {
         Ok(())
     }
 
-    async fn load_filtered_policy<'a>(
-        &mut self,
-        m: &mut dyn Model,
-        f: Filter<'a>,
-    ) -> Result<()> {
+    async fn load_filtered_policy<'a>(&mut self, m: &mut dyn Model, f: Filter<'a>) -> Result<()> {
         let rules = adapter::load_filtered_policy(&self.pool, &f).await?;
         self.is_filtered.store(true, Ordering::SeqCst);
 
         for casbin_rule in &rules {
             if let Some(policy) = self.normalize_policy(casbin_rule) {
-                if let Some(ref sec) =
-                    casbin_rule.ptype.chars().next().map(|x| x.to_string())
-                {
+                if let Some(ref sec) = casbin_rule.ptype.chars().next().map(|x| x.to_string()) {
                     if let Some(t1) = m.get_mut_model().get_mut(sec) {
                         if let Some(t2) = t1.get_mut(&casbin_rule.ptype) {
                             t2.get_mut_policy().insert(policy);
@@ -229,12 +204,7 @@ impl Adapter for TokioPostgresAdapter {
         adapter::save_policy(&self.pool, rules).await
     }
 
-    async fn add_policy(
-        &mut self,
-        _sec: &str,
-        ptype: &str,
-        rule: Vec<String>,
-    ) -> Result<bool> {
+    async fn add_policy(&mut self, _sec: &str, ptype: &str, rule: Vec<String>) -> Result<bool> {
         if let Some(new_rule) = self.save_policy_line(ptype, rule.as_slice()) {
             return adapter::add_policy(&self.pool, new_rule).await;
         }
@@ -256,12 +226,7 @@ impl Adapter for TokioPostgresAdapter {
         adapter::add_policies(&self.pool, new_rules).await
     }
 
-    async fn remove_policy(
-        &mut self,
-        _sec: &str,
-        pt: &str,
-        rule: Vec<String>,
-    ) -> Result<bool> {
+    async fn remove_policy(&mut self, _sec: &str, pt: &str, rule: Vec<String>) -> Result<bool> {
         adapter::remove_policy(&self.pool, pt, rule).await
     }
 
@@ -281,17 +246,8 @@ impl Adapter for TokioPostgresAdapter {
         field_index: usize,
         field_values: Vec<String>,
     ) -> Result<bool> {
-        if field_index <= 5
-            && !field_values.is_empty()
-            && field_values.len() > field_index
-        {
-            adapter::remove_filtered_policy(
-                &self.pool,
-                pt,
-                field_index,
-                field_values,
-            )
-            .await
+        if field_index <= 5 && !field_values.is_empty() && field_values.len() > field_index {
+            adapter::remove_filtered_policy(&self.pool, pt, field_index, field_values).await
         } else {
             Ok(false)
         }
@@ -314,10 +270,7 @@ mod tests {
         v.into_iter().map(|x| x.to_owned()).collect()
     }
 
-    #[cfg_attr(
-        feature = "runtime-tokio",
-        tokio::test(flavor = "multi_thread")
-    )]
+    #[cfg_attr(feature = "runtime-tokio", tokio::test(flavor = "multi_thread"))]
     async fn test_create() {
         use casbin::prelude::*;
 
@@ -340,10 +293,7 @@ mod tests {
         assert!(Enforcer::new(m, adapter).await.is_ok());
     }
 
-    #[cfg_attr(
-        feature = "runtime-tokio",
-        tokio::test(flavor = "multi_thread")
-    )]
+    #[cfg_attr(feature = "runtime-tokio", tokio::test(flavor = "multi_thread"))]
     async fn test_create_with_pool() {
         use casbin::prelude::*;
 
@@ -352,15 +302,12 @@ mod tests {
             .unwrap();
         let pool = {
             {
-                use deadpool_postgres::{
-                    Manager, ManagerConfig, Pool, RecyclingMethod,
-                };
+                use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
                 use tokio_postgres::NoTls;
 
-                let pg_config = PgConfig::from_str(
-                    &"postgres://casbin_rs:casbin_rs@localhost:5432/casbin",
-                )
-                .expect("failed to parse url");
+                let pg_config =
+                    PgConfig::from_str(&"postgres://casbin_rs:casbin_rs@localhost:5432/casbin")
+                        .expect("failed to parse url");
                 let mgr_config = ManagerConfig {
                     recycling_method: RecyclingMethod::Fast,
                 };
@@ -374,10 +321,7 @@ mod tests {
         assert!(Enforcer::new(m, adapter).await.is_ok());
     }
 
-    #[cfg_attr(
-        feature = "runtime-tokio",
-        tokio::test(flavor = "multi_thread")
-    )]
+    #[cfg_attr(feature = "runtime-tokio", tokio::test(flavor = "multi_thread"))]
     async fn test_adapter() {
         use casbin::prelude::*;
 
@@ -411,19 +355,11 @@ mod tests {
             .await
             .is_ok());
         assert!(adapter
-            .remove_policy(
-                "",
-                "p",
-                to_owned(vec!["data2_admin", "data2", "read"])
-            )
+            .remove_policy("", "p", to_owned(vec!["data2_admin", "data2", "read"]))
             .await
             .is_ok());
         assert!(adapter
-            .remove_policy(
-                "",
-                "p",
-                to_owned(vec!["data2_admin", "data2", "write"])
-            )
+            .remove_policy("", "p", to_owned(vec!["data2_admin", "data2", "write"]))
             .await
             .is_ok());
         assert!(adapter
@@ -440,19 +376,11 @@ mod tests {
             .await
             .is_ok());
         assert!(adapter
-            .add_policy(
-                "",
-                "p",
-                to_owned(vec!["data2_admin", "data2", "read"])
-            )
+            .add_policy("", "p", to_owned(vec!["data2_admin", "data2", "read"]))
             .await
             .is_ok());
         assert!(adapter
-            .add_policy(
-                "",
-                "p",
-                to_owned(vec!["data2_admin", "data2", "write"])
-            )
+            .add_policy("", "p", to_owned(vec!["data2_admin", "data2", "write"]))
             .await
             .is_ok());
 
@@ -498,19 +426,11 @@ mod tests {
             .await
             .is_ok());
         assert!(adapter
-            .remove_policy(
-                "",
-                "p",
-                to_owned(vec!["data2_admin", "data2", "read"])
-            )
+            .remove_policy("", "p", to_owned(vec!["data2_admin", "data2", "read"]))
             .await
             .is_ok());
         assert!(adapter
-            .remove_policy(
-                "",
-                "p",
-                to_owned(vec!["data2_admin", "data2", "write"])
-            )
+            .remove_policy("", "p", to_owned(vec!["data2_admin", "data2", "write"]))
             .await
             .is_ok());
         assert!(adapter
@@ -547,12 +467,7 @@ mod tests {
             .unwrap());
 
         assert!(adapter
-            .remove_filtered_policy(
-                "",
-                "g",
-                0,
-                to_owned(vec!["alice", "data2_admin"])
-            )
+            .remove_filtered_policy("", "g", 0, to_owned(vec!["alice", "data2_admin"]))
             .await
             .unwrap());
 

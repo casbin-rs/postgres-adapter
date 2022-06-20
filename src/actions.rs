@@ -10,12 +10,14 @@ use tokio_postgres::{types::Type, SimpleQueryMessage};
 pub type ConnectionPool = Pool;
 
 pub async fn new(conn: &ConnectionPool) -> Result<Vec<SimpleQueryMessage>> {
-    let client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
-    client.simple_query(
-        "CREATE TABLE IF NOT EXISTS casbin_rule (
+    client
+        .simple_query(
+            "CREATE TABLE IF NOT EXISTS casbin_rule (
                     id SERIAL PRIMARY KEY,
                     ptype VARCHAR NOT NULL,
                     v0 VARCHAR NOT NULL,
@@ -26,21 +28,18 @@ pub async fn new(conn: &ConnectionPool) -> Result<Vec<SimpleQueryMessage>> {
                     v5 VARCHAR NOT NULL,
                     CONSTRAINT unique_key_pg_adapter UNIQUE(ptype, v0, v1, v2, v3, v4, v5)
                     )
-        "
-    )
-    .await
-    .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
+        ",
+        )
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
 }
 
-pub async fn remove_policy(
-    conn: &ConnectionPool,
-    pt: &str,
-    rule: Vec<String>,
-) -> Result<bool> {
+pub async fn remove_policy(conn: &ConnectionPool, pt: &str, rule: Vec<String>) -> Result<bool> {
     let rule = normalize_casbin_rule(rule);
-    let client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
     let stmt = client
         .prepare_typed(
@@ -64,26 +63,17 @@ pub async fn remove_policy(
             ],
         )
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     client
         .query_opt(
             &stmt,
             &[
-                &pt, &rule[0], &rule[1], &rule[2], &rule[3], &rule[4],
-                &rule[5],
+                &pt, &rule[0], &rule[1], &rule[2], &rule[3], &rule[4], &rule[5],
             ],
         )
         .await
         .map(|s| s.is_some())
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
 }
 
 pub async fn remove_policies(
@@ -91,9 +81,10 @@ pub async fn remove_policies(
     pt: &str,
     rules: Vec<Vec<String>>,
 ) -> Result<bool> {
-    let mut client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let mut client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
     let stmt = client
         .prepare_typed(
@@ -117,35 +108,28 @@ pub async fn remove_policies(
             ],
         )
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
-    let transaction = client.transaction().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
+    let transaction = client
+        .transaction()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     for rule in rules {
         let rule = normalize_casbin_rule(rule);
         transaction
             .query_one(
                 &stmt,
                 &[
-                    &pt, &rule[0], &rule[1], &rule[2], &rule[3], &rule[4],
-                    &rule[5],
+                    &pt, &rule[0], &rule[1], &rule[2], &rule[3], &rule[4], &rule[5],
                 ],
             )
             .await
             .map(|s| s.is_empty())
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     }
-    transaction.commit().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    transaction
+        .commit()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     Ok(true)
 }
 
@@ -155,9 +139,10 @@ pub async fn remove_filtered_policy(
     field_index: usize,
     field_values: Vec<String>,
 ) -> Result<bool> {
-    let client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
     let field_values = normalize_casbin_rule(field_values);
     if field_index == 5 {
@@ -170,20 +155,12 @@ pub async fn remove_filtered_policy(
                 &[Type::TEXT, Type::TEXT],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
         client
             .query_opt(&stmt, &[&pt, &field_values[5]])
             .await
             .map(|s| s.is_some())
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
     } else if field_index == 4 {
         let stmt = client
             .prepare_typed(
@@ -195,20 +172,12 @@ pub async fn remove_filtered_policy(
                 &[Type::TEXT, Type::TEXT, Type::TEXT],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
         client
             .query_opt(&stmt, &[&pt, &field_values[4], &field_values[5]])
             .await
             .map(|s| s.is_some())
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
     } else if field_index == 3 {
         let stmt = client
             .prepare_typed(
@@ -221,11 +190,7 @@ pub async fn remove_filtered_policy(
                 &[Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
         client
             .query_opt(
                 &stmt,
@@ -233,11 +198,7 @@ pub async fn remove_filtered_policy(
             )
             .await
             .map(|s| s.is_some())
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
     } else if field_index == 2 {
         let stmt = client
             .prepare_typed(
@@ -251,11 +212,7 @@ pub async fn remove_filtered_policy(
                 &[Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT, Type::TEXT],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
         client
             .query_opt(
                 &stmt,
@@ -269,11 +226,7 @@ pub async fn remove_filtered_policy(
             )
             .await
             .map(|s| s.is_some())
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
     } else if field_index == 1 {
         let stmt = client
             .prepare_typed(
@@ -295,11 +248,7 @@ pub async fn remove_filtered_policy(
                 ],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
         client
             .query_opt(
                 &stmt,
@@ -314,11 +263,7 @@ pub async fn remove_filtered_policy(
             )
             .await
             .map(|s| s.is_some())
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
     } else {
         let stmt = client
             .prepare_typed(
@@ -342,11 +287,7 @@ pub async fn remove_filtered_policy(
                 ],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
         client
             .query_opt(
@@ -363,37 +304,24 @@ pub async fn remove_filtered_policy(
             )
             .await
             .map(|s| s.is_some())
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))
     }
 }
 
-pub(crate) async fn load_policy(
-    conn: &ConnectionPool,
-) -> Result<Vec<CasbinRule>> {
-    let client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+pub(crate) async fn load_policy(conn: &ConnectionPool) -> Result<Vec<CasbinRule>> {
+    let client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
     let stmt = client
         .prepare_typed("SELECT * FROM casbin_rule", &[])
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     let casbin_rule: Vec<CasbinRule> = client
         .query(&stmt, &[])
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?
         .into_iter()
         .map(CasbinRule::from)
         .collect();
@@ -404,9 +332,10 @@ pub(crate) async fn load_filtered_policy<'a>(
     conn: &ConnectionPool,
     filter: &Filter<'_>,
 ) -> Result<Vec<CasbinRule>> {
-    let client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
     let (g_filter, p_filter) = filtered_where_values(filter);
 
@@ -444,11 +373,7 @@ pub(crate) async fn load_filtered_policy<'a>(
         )
         .await
         // .map(|s| s.into())
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?
         .into_iter()
         .map(CasbinRule::from)
         .collect();
@@ -456,9 +381,7 @@ pub(crate) async fn load_filtered_policy<'a>(
     Ok(casbin_rule)
 }
 
-fn filtered_where_values<'a>(
-    filter: &Filter<'a>,
-) -> ([&'a str; 6], [&'a str; 6]) {
+fn filtered_where_values<'a>(filter: &Filter<'a>) -> ([&'a str; 6], [&'a str; 6]) {
     let mut g_filter: [&'a str; 6] = ["%", "%", "%", "%", "%", "%"];
     let mut p_filter: [&'a str; 6] = ["%", "%", "%", "%", "%", "%"];
     for (idx, val) in filter.g.iter().enumerate() {
@@ -478,9 +401,10 @@ pub(crate) async fn save_policy(
     conn: &ConnectionPool,
     rules: Vec<NewCasbinRule<'_>>,
 ) -> Result<()> {
-    let mut client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let mut client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
     let (stmt_delete, stmt_insert) = try_join!(
         client.prepare_typed("DELETE FROM casbin_rule", &[]),
         client.prepare_typed(
@@ -497,17 +421,17 @@ pub(crate) async fn save_policy(
             ],
         ),
     )
-    .map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
-    let transaction = client.transaction().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    let transaction = client
+        .transaction()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
-    transaction.query(&stmt_delete, &[]).await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    transaction
+        .query(&stmt_delete, &[])
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
     for rule in rules {
         transaction
@@ -524,25 +448,20 @@ pub(crate) async fn save_policy(
                 ],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     }
-    transaction.commit().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    transaction
+        .commit()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     Ok(())
 }
 
-pub(crate) async fn add_policy(
-    conn: &ConnectionPool,
-    rule: NewCasbinRule<'_>,
-) -> Result<bool> {
-    let client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+pub(crate) async fn add_policy(conn: &ConnectionPool, rule: NewCasbinRule<'_>) -> Result<bool> {
+    let client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
     let stmt = client
         .prepare_typed(
             "INSERT INTO casbin_rule ( ptype, v0, v1, v2, v3, v4, v5 )
@@ -559,11 +478,7 @@ pub(crate) async fn add_policy(
             ],
         )
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     client
         .query_one(
             &stmt,
@@ -578,11 +493,7 @@ pub(crate) async fn add_policy(
             ],
         )
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
     Ok(true)
 }
@@ -591,9 +502,10 @@ pub(crate) async fn add_policies(
     conn: &ConnectionPool,
     rules: Vec<NewCasbinRule<'_>>,
 ) -> Result<bool> {
-    let mut client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let mut client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
     let stmt = client
         .prepare_typed(
@@ -611,15 +523,12 @@ pub(crate) async fn add_policies(
             ],
         )
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
-    let transaction = client.transaction().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    let transaction = client
+        .transaction()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     for rule in rules {
         transaction
             .query_one(
@@ -635,42 +544,39 @@ pub(crate) async fn add_policies(
                 ],
             )
             .await
-            .map_err(|err| {
-                CasbinError::from(AdapterError(Box::new(
-                    Error::PostgresError(err),
-                )))
-            })?;
+            .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     }
-    transaction.commit().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    transaction
+        .commit()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     Ok(true)
 }
 
 pub(crate) async fn clear_policy(conn: &ConnectionPool) -> Result<()> {
-    let mut client = conn.get().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PoolError(err))))
-    })?;
+    let mut client = conn
+        .get()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PoolError(err)))))?;
 
     let stmt = client
         .prepare_typed("DELETE FROM casbin_rule", &[])
         .await
-        .map_err(|err| {
-            CasbinError::from(AdapterError(Box::new(Error::PostgresError(
-                err,
-            ))))
-        })?;
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
-    let transaction = client.transaction().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
-    transaction.query(&stmt, &[]).await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    let transaction = client
+        .transaction()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
+    transaction
+        .query(&stmt, &[])
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
 
-    transaction.commit().await.map_err(|err| {
-        CasbinError::from(AdapterError(Box::new(Error::PostgresError(err))))
-    })?;
+    transaction
+        .commit()
+        .await
+        .map_err(|err| CasbinError::from(AdapterError(Box::new(Error::PostgresError(err)))))?;
     Ok(())
 }
 
