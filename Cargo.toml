@@ -15,7 +15,7 @@ dotenv = { version = "0.15.0", default-features = false }
 tokio = { version = "1.19.2", default-features = false, optional = true }
 tokio-postgres = { version = "0.7.6", default-features = false }
 deadpool-postgres = { version = "0.10.2", default-features = false }
-deadpool = { version = "0.9.5", default-features = false }
+deadpool = { version = "0.10.0", default-features = false }
 futures = "0.3"
 
 [features]
